@@ -6,10 +6,8 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
 # --- CONFIGURATION ---
-ctk.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
-ctk.set_default_color_theme(
-    "dark-blue"
-)  # Themes: "blue" (standard), "green", "dark-blue"
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("dark-blue")
 
 
 class ModernMangaMerger(ctk.CTk):
@@ -18,9 +16,9 @@ class ModernMangaMerger(ctk.CTk):
 
         # Window Setup
         self.title("Manga Volume Merger")
-        self.geometry("900x700")
+        self.geometry("1100x700")  # Made slightly wider for the split view
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=1)  # Volume list expands
+        self.grid_rowconfigure(3, weight=1)  # Main content area expands
 
         self.volume_entries = []
 
@@ -115,13 +113,49 @@ class ModernMangaMerger(ctk.CTk):
         )
         btn_gen.pack(side="left", padx=15)
 
-        # --- SCROLLABLE VOLUME LIST ---
-        # CustomTkinter has a built-in ScrollableFrame, so we don't need Canvas/Scrollbar logic!
-        self.list_frame = ctk.CTkScrollableFrame(self, label_text="Volume Definitions")
-        self.list_frame.grid(
+        # --- SPLIT CONTENT AREA (List + Preview) ---
+        self.content_area = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_area.grid(
             row=3, column=0, columnspan=2, sticky="nsew", padx=20, pady=10
         )
-        self.grid_rowconfigure(3, weight=1)  # Allow this to expand
+        self.content_area.grid_columnconfigure(0, weight=4)  # List takes 40% width
+        self.content_area.grid_columnconfigure(1, weight=6)  # Preview takes 60% width
+        self.content_area.grid_rowconfigure(0, weight=1)
+
+        # LEFT: Volume List
+        self.list_frame = ctk.CTkScrollableFrame(
+            self.content_area, label_text="Volume Definitions"
+        )
+        self.list_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        # RIGHT: Preview Panel
+        self.preview_frame = ctk.CTkFrame(self.content_area)
+        self.preview_frame.grid(row=0, column=1, sticky="nsew")
+        self.preview_frame.grid_rowconfigure(1, weight=1)
+        self.preview_frame.grid_columnconfigure(0, weight=1)
+
+        # Preview Header
+        preview_header = ctk.CTkLabel(
+            self.preview_frame,
+            text=" VOLUME CONTENT PREVIEW ",
+            fg_color="#2b2b2b",
+            corner_radius=6,
+            font=ctk.CTkFont(weight="bold"),
+        )
+        preview_header.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+
+        # Preview Text Box (Consolas font for lists)
+        self.preview_text = ctk.CTkTextbox(
+            self.preview_frame,
+            font=ctk.CTkFont(family="Consolas", size=12),
+            wrap="none",
+        )
+        self.preview_text.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.preview_text.insert(
+            "1.0",
+            "Click the '👁 Preview' button on a row to see the pages inside that volume.",
+        )
+        self.preview_text.configure(state="disabled")
 
         # --- FOOTER ACTIONS ---
         self.footer = ctk.CTkFrame(self, height=60, fg_color="transparent")
@@ -163,34 +197,48 @@ class ModernMangaMerger(ctk.CTk):
         row = ctk.CTkFrame(self.list_frame)
         row.pack(fill="x", pady=2)
 
-        ctk.CTkLabel(row, text="Vol:").pack(side="left", padx=(10, 5))
-        e_vol = ctk.CTkEntry(row, width=60)
+        # Volume Input
+        ctk.CTkLabel(row, text="Vol:").pack(side="left", padx=(5, 2))
+        e_vol = ctk.CTkEntry(row, width=50)
         e_vol.pack(side="left", pady=5)
         if vol:
             e_vol.insert(0, str(vol))
 
-        ctk.CTkLabel(row, text="Start Ch:").pack(side="left", padx=(15, 5))
-        e_ch = ctk.CTkEntry(row, width=60)
+        # Start Chapter Input
+        ctk.CTkLabel(row, text="Start:").pack(side="left", padx=(10, 2))
+        e_ch = ctk.CTkEntry(row, width=50)
         e_ch.pack(side="left", pady=5)
         if ch:
             e_ch.insert(0, str(ch))
 
-        # Delete button (X)
+        # Delete Button (Right)
         btn_del = ctk.CTkButton(
             row,
             text="×",
             width=30,
-            fg_color="transparent",
-            text_color="#E74C3C",
-            hover_color="#552222",
+            height=25,
+            fg_color="#C0392B",
+            hover_color="#922B21",
             command=lambda: self.delete_row(row),
         )
-        btn_del.pack(side="right", padx=10)
+        btn_del.pack(side="right", padx=5)
+
+        # PREVIEW BUTTON (The new feature)
+        # Using an 'eye' symbol or just text.
+        btn_prev = ctk.CTkButton(
+            row,
+            text="👁",
+            width=30,
+            height=25,
+            fg_color="#3498DB",
+            hover_color="#2980B9",
+            command=lambda: self.load_preview(e_vol.get(), e_ch.get()),
+        )
+        btn_prev.pack(side="right", padx=5)
 
         self.volume_entries.append((row, e_vol, e_ch))
 
     def delete_row(self, row_widget):
-        # Remove from list
         self.volume_entries = [
             entry for entry in self.volume_entries if entry[0] != row_widget
         ]
@@ -206,21 +254,134 @@ class ModernMangaMerger(ctk.CTk):
             sv = int(self.start_vol.get())
             ev = int(self.end_vol.get())
             sc = int(self.start_ch.get())
-
             count = ev - sv + 1
             if count <= 0:
                 raise ValueError
-
             self.clear_list()
             for i in range(count):
-                self.add_row(sv + i, sc + (i * 4))  # Default 4 chapters spacing
+                self.add_row(sv + i, sc + (i * 4))
         except ValueError:
-            messagebox.showerror(
-                "Error", "Please enter valid integers for Start/End Volume."
+            messagebox.showerror("Error", "Please enter valid integers.")
+
+    # --- PREVIEW FEATURE LOGIC ---
+    def load_preview(self, vol_str, start_ch_str):
+        # Run in thread to not freeze UI while reading zips
+        threading.Thread(
+            target=self._generate_preview, args=(vol_str, start_ch_str), daemon=True
+        ).start()
+
+    def _generate_preview(self, vol_str, start_ch_str):
+        source = self.source_entry.get()
+        prefix = self.prefix_entry.get()
+
+        if not source or not os.path.exists(source):
+            self._update_preview("Error: Invalid or missing Source Folder.")
+            return
+
+        try:
+            target_vol = int(vol_str)
+            target_start = int(start_ch_str)
+        except ValueError:
+            self._update_preview("Error: Invalid Volume or Chapter number.")
+            return
+
+        self._update_preview(
+            f"Scanning content for Volume {target_vol}...\n(Start Ch: {target_start})\nPlease wait..."
+        )
+
+        # 1. Determine Stop Chapter based on ALL entries
+        # We need to find what the NEXT volume starts at to know where THIS one ends.
+        vol_defs = {}
+        for _, e_v, e_c in self.volume_entries:
+            try:
+                vol_defs[int(e_v.get())] = int(e_c.get())
+            except:
+                continue
+
+        sorted_vols = sorted(vol_defs.keys())
+
+        # Find our index
+        try:
+            idx = sorted_vols.index(target_vol)
+            # If there is a next volume, stop before it.
+            if idx + 1 < len(sorted_vols):
+                next_vol_start = vol_defs[sorted_vols[idx + 1]]
+                limit = next_vol_start
+            else:
+                # If it's the last volume, check the global stop limit
+                try:
+                    limit = int(self.stop_ch.get())
+                except:
+                    limit = 0
+                if limit == 0:
+                    limit = 999999  # No limit
+        except ValueError:
+            limit = 999999
+
+        # 2. Scan Files
+        all_files = [
+            f for f in os.listdir(source) if f.lower().endswith((".zip", ".cbz"))
+        ]
+        matching_files = []
+
+        for f in all_files:
+            if f.startswith(prefix):
+                continue
+            c_num = self.get_chapter_number(f)
+
+            if c_num >= target_start and c_num < limit:
+                matching_files.append(f)
+
+        matching_files.sort(key=self.get_chapter_number)
+
+        # 3. Read Zips (The "Pages" part)
+        output_text = f"=== PREVIEW: VOLUME {target_vol:02d} ===\n"
+        output_text += (
+            f"Range: Ch {target_start} -> "
+            + (f"Ch {limit} (Exclusive)" if limit < 999999 else "End")
+            + "\n\n"
+        )
+
+        if not matching_files:
+            output_text += "No matching chapters found in source folder."
+        else:
+            total_pages = 0
+            for cbz in matching_files:
+                output_text += f"📄 {cbz}\n"
+                try:
+                    full_path = os.path.join(source, cbz)
+                    with zipfile.ZipFile(full_path, "r") as z:
+                        # Get images only
+                        imgs = [
+                            x
+                            for x in z.namelist()
+                            if x.lower().endswith((".jpg", ".png", ".jpeg", ".webp"))
+                        ]
+                        imgs.sort()
+                        total_pages += len(imgs)
+
+                        # List them indented
+                        for img in imgs:
+                            output_text += f"    └─ {img}\n"
+                except Exception as e:
+                    output_text += f"    [Error reading file: {str(e)}]\n"
+                output_text += "\n"
+
+            output_text += (
+                f"---------------------------\nTotal Pages found: {total_pages}"
             )
 
+        self._update_preview(output_text)
+
+    def _update_preview(self, text):
+        # Helper to update GUI from thread
+        self.preview_text.configure(state="normal")
+        self.preview_text.delete("1.0", "end")
+        self.preview_text.insert("1.0", text)
+        self.preview_text.configure(state="disabled")
+
+    # --- MAIN MERGE LOGIC (Same as before) ---
     def start_process_thread(self):
-        # Run in a separate thread to keep UI responsive
         threading.Thread(target=self.run_merger, daemon=True).start()
 
     def run_merger(self):
@@ -234,7 +395,6 @@ class ModernMangaMerger(ctk.CTk):
             messagebox.showerror("Error", "No volumes defined")
             return
 
-        # Disable button during run
         self.btn_run.configure(state="disabled", text="Processing...")
 
         try:
@@ -243,7 +403,6 @@ class ModernMangaMerger(ctk.CTk):
         except:
             stop_limit = 0
 
-        # Gather data
         vol_defs = {}
         for _, e_v, e_c in self.volume_entries:
             try:
@@ -256,24 +415,18 @@ class ModernMangaMerger(ctk.CTk):
             f for f in os.listdir(source) if f.lower().endswith((".zip", ".cbz"))
         ]
 
-        # Processing Loop
         for i, vol_num in enumerate(sorted_vols):
             start_c = vol_defs[vol_num]
-
-            # Determine end chapter for this volume
             if i + 1 < len(sorted_vols):
                 end_c = vol_defs[sorted_vols[i + 1]]
             else:
                 end_c = stop_limit if stop_limit > 0 else 999999
 
-            # Filter files
             target_files = []
             for f in all_files:
                 if f.startswith(prefix):
-                    continue  # Skip already merged files
+                    continue
                 c_num = self.get_chapter_number(f)
-
-                # Logic: strictly >= start AND < next_start (or stop_limit)
                 if stop_limit > 0 and c_num >= stop_limit:
                     continue
                 if c_num >= start_c and c_num < end_c:
@@ -286,7 +439,6 @@ class ModernMangaMerger(ctk.CTk):
         messagebox.showinfo("Done", "Processing Complete!")
 
     def get_chapter_number(self, filename):
-        # Robust regex for chapter extraction
         clean = re.sub(r"20\d\d", "", filename)
         clean = re.sub(r"[Vv]ol\.?\s?\d+", "", clean)
         match = re.search(r"(?:ch|c|#)\.?\s*(\d+(\.\d+)?)", clean, re.I)
