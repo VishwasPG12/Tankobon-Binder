@@ -2,6 +2,8 @@ import os
 import zipfile
 import re
 import threading
+import io
+from PIL import Image
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
@@ -10,17 +12,133 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
 
+class ChapterAccordion(ctk.CTkFrame):
+    """
+    A dropdown for a SINGLE chapter.
+    Contains rows of Page Buttons.
+    """
+
+    def __init__(self, parent, chapter_filename, zip_path, image_list):
+        super().__init__(parent, fg_color="transparent")
+
+        self.is_expanded = False
+        self.has_loaded_content = False
+        self.chapter_name = chapter_filename
+        self.zip_path = zip_path
+        self.image_list = image_list
+
+        # Track active images to toggle them {page_name: widget}
+        self.open_image_widgets = {}
+
+        # 1. Header Button
+        self.toggle_btn = ctk.CTkButton(
+            self,
+            text=f"▶  {self.chapter_name}",
+            command=self.toggle,
+            fg_color="#2B2B2B",
+            hover_color="#3A3A3A",
+            anchor="w",
+            height=30,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.toggle_btn.pack(fill="x", pady=(0, 2))
+
+        # 2. Content Frame (Hidden initially)
+        self.content_frame = ctk.CTkFrame(self, fg_color="#1e1e1e")
+
+    def toggle(self):
+        if self.is_expanded:
+            self.content_frame.pack_forget()
+            self.toggle_btn.configure(text=f"▶  {self.chapter_name}")
+        else:
+            self.content_frame.pack(fill="x", padx=10)
+            self.toggle_btn.configure(text=f"▼  {self.chapter_name}")
+
+            if not self.has_loaded_content:
+                self.load_page_buttons()
+                self.has_loaded_content = True
+
+        self.is_expanded = not self.is_expanded
+
+    def load_page_buttons(self):
+        if not self.image_list:
+            ctk.CTkLabel(
+                self.content_frame, text="(No images found)", text_color="gray"
+            ).pack(pady=5)
+            return
+
+        # Create a "Row Frame" for each page
+        # This allows us to pack the image INSIDE this row, directly below the button
+        for img_name in self.image_list:
+            row_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+            row_frame.pack(fill="x", pady=1)
+
+            btn = ctk.CTkButton(
+                row_frame,
+                text=f"📄 {os.path.basename(img_name)}",
+                # Pass the row_frame so we know where to put the image
+                command=lambda r=row_frame, i=img_name: self.toggle_image_inline(r, i),
+                fg_color="transparent",
+                hover_color="#333333",
+                anchor="w",
+                height=24,
+                font=ctk.CTkFont(family="Consolas", size=11),
+            )
+            btn.pack(fill="x", padx=5)
+
+    def toggle_image_inline(self, row_frame, img_path):
+        # 1. Check if image is already open for this path
+        if img_path in self.open_image_widgets:
+            # CLOSE IT
+            widget = self.open_image_widgets[img_path]
+            widget.destroy()
+            del self.open_image_widgets[img_path]
+            return
+
+        # 2. OPEN IT
+        try:
+            # Read image from zip
+            with zipfile.ZipFile(self.zip_path, "r") as z:
+                img_data = z.read(img_path)
+
+            pil_image = Image.open(io.BytesIO(img_data))
+
+            # Resize for preview (Max width 450 to fit nicely)
+            w, h = pil_image.size
+            aspect = w / h
+            target_w = 450
+            target_h = int(target_w / aspect)
+
+            ctk_img = ctk.CTkImage(
+                light_image=pil_image, dark_image=pil_image, size=(target_w, target_h)
+            )
+
+            # Create the Label containing the image
+            # We pack it into 'row_frame' so it appears right under the button we clicked
+            img_label = ctk.CTkLabel(row_frame, text="", image=ctk_img)
+            img_label.pack(pady=5)
+
+            # Track it so we can close it later
+            self.open_image_widgets[img_path] = img_label
+
+        except Exception as e:
+            err_label = ctk.CTkLabel(row_frame, text=f"Error: {e}", text_color="red")
+            err_label.pack()
+            self.open_image_widgets[img_path] = err_label
+
+
 class ModernMangaMerger(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         # Window Setup
         self.title("Manga Volume Merger")
-        self.geometry("1100x700")  # Made slightly wider for the split view
+        self.geometry("1200x800")
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(3, weight=1)  # Main content area expands
+        self.grid_rowconfigure(3, weight=1)
 
         self.volume_entries = []
+        self.active_accordions = []
 
         self.create_ui()
 
@@ -45,7 +163,6 @@ class ModernMangaMerger(ctk.CTk):
         )
         self.settings_frame.grid_columnconfigure(1, weight=1)
 
-        # Source Folder
         ctk.CTkLabel(self.settings_frame, text="Source Folder:").grid(
             row=0, column=0, padx=15, pady=15, sticky="w"
         )
@@ -60,7 +177,6 @@ class ModernMangaMerger(ctk.CTk):
         )
         btn_browse.grid(row=0, column=2, padx=15, pady=15)
 
-        # Output Prefix
         ctk.CTkLabel(self.settings_frame, text="Output Prefix:").grid(
             row=1, column=0, padx=15, pady=(0, 15), sticky="w"
         )
@@ -75,7 +191,6 @@ class ModernMangaMerger(ctk.CTk):
             row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=5
         )
 
-        # Generator Inputs
         self.gen_frame = ctk.CTkFrame(self.controls_frame)
         self.gen_frame.pack(side="top", fill="x", pady=(0, 10))
 
@@ -113,13 +228,13 @@ class ModernMangaMerger(ctk.CTk):
         )
         btn_gen.pack(side="left", padx=15)
 
-        # --- SPLIT CONTENT AREA (List + Preview) ---
+        # --- SPLIT CONTENT AREA ---
         self.content_area = ctk.CTkFrame(self, fg_color="transparent")
         self.content_area.grid(
             row=3, column=0, columnspan=2, sticky="nsew", padx=20, pady=10
         )
-        self.content_area.grid_columnconfigure(0, weight=4)  # List takes 40% width
-        self.content_area.grid_columnconfigure(1, weight=6)  # Preview takes 60% width
+        self.content_area.grid_columnconfigure(0, weight=4)
+        self.content_area.grid_columnconfigure(1, weight=6)
         self.content_area.grid_rowconfigure(0, weight=1)
 
         # LEFT: Volume List
@@ -135,29 +250,34 @@ class ModernMangaMerger(ctk.CTk):
         self.preview_frame.grid_columnconfigure(0, weight=1)
 
         # Preview Header
-        preview_header = ctk.CTkLabel(
-            self.preview_frame,
-            text=" VOLUME CONTENT PREVIEW ",
-            fg_color="#2b2b2b",
-            corner_radius=6,
+        preview_header_bar = ctk.CTkFrame(
+            self.preview_frame, fg_color="#2b2b2b", corner_radius=6
+        )
+        preview_header_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+
+        self.lbl_prev_title = ctk.CTkLabel(
+            preview_header_bar,
+            text=" SELECT A VOLUME ",
             font=ctk.CTkFont(weight="bold"),
         )
-        preview_header.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+        self.lbl_prev_title.pack(side="left", padx=10, pady=5)
 
-        # Preview Text Box (Consolas font for lists)
-        self.preview_text = ctk.CTkTextbox(
-            self.preview_frame,
-            font=ctk.CTkFont(family="Consolas", size=12),
-            wrap="none",
+        # Preview Container
+        self.preview_container = ctk.CTkScrollableFrame(
+            self.preview_frame, fg_color="transparent"
         )
-        self.preview_text.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        self.preview_text.insert(
-            "1.0",
-            "Click the '👁 Preview' button on a row to see the pages inside that volume.",
+        self.preview_container.grid(
+            row=1, column=0, sticky="nsew", padx=10, pady=(0, 10)
         )
-        self.preview_text.configure(state="disabled")
 
-        # --- FOOTER ACTIONS ---
+        self.lbl_instruction = ctk.CTkLabel(
+            self.preview_container,
+            text="Click the '👁' button on a row\nto load chapters and preview pages.",
+            text_color="gray",
+        )
+        self.lbl_instruction.pack(pady=20)
+
+        # --- FOOTER ---
         self.footer = ctk.CTkFrame(self, height=60, fg_color="transparent")
         self.footer.grid(row=4, column=0, columnspan=2, sticky="ew", padx=20, pady=20)
 
@@ -168,7 +288,7 @@ class ModernMangaMerger(ctk.CTk):
 
         btn_clear = ctk.CTkButton(
             self.footer,
-            text="Clear All",
+            text="Clear List",
             command=self.clear_list,
             width=120,
             fg_color="#C0392B",
@@ -186,7 +306,6 @@ class ModernMangaMerger(ctk.CTk):
         self.btn_run.pack(side="right", fill="x", expand=True, padx=(20, 0))
 
     # --- LOGIC ---
-
     def browse_folder(self):
         folder = filedialog.askdirectory()
         if folder:
@@ -197,21 +316,18 @@ class ModernMangaMerger(ctk.CTk):
         row = ctk.CTkFrame(self.list_frame)
         row.pack(fill="x", pady=2)
 
-        # Volume Input
         ctk.CTkLabel(row, text="Vol:").pack(side="left", padx=(5, 2))
         e_vol = ctk.CTkEntry(row, width=50)
         e_vol.pack(side="left", pady=5)
         if vol:
             e_vol.insert(0, str(vol))
 
-        # Start Chapter Input
         ctk.CTkLabel(row, text="Start:").pack(side="left", padx=(10, 2))
         e_ch = ctk.CTkEntry(row, width=50)
         e_ch.pack(side="left", pady=5)
         if ch:
             e_ch.insert(0, str(ch))
 
-        # Delete Button (Right)
         btn_del = ctk.CTkButton(
             row,
             text="×",
@@ -223,8 +339,6 @@ class ModernMangaMerger(ctk.CTk):
         )
         btn_del.pack(side="right", padx=5)
 
-        # PREVIEW BUTTON (The new feature)
-        # Using an 'eye' symbol or just text.
         btn_prev = ctk.CTkButton(
             row,
             text="👁",
@@ -263,34 +377,35 @@ class ModernMangaMerger(ctk.CTk):
         except ValueError:
             messagebox.showerror("Error", "Please enter valid integers.")
 
-    # --- PREVIEW FEATURE LOGIC ---
+    # --- PREVIEW LOGIC ---
+    def clear_previews(self):
+        for widget in self.preview_container.winfo_children():
+            widget.destroy()
+        self.active_accordions.clear()
+
     def load_preview(self, vol_str, start_ch_str):
-        # Run in thread to not freeze UI while reading zips
+        self.lbl_prev_title.configure(text=f" LOADING VOLUME {vol_str}... ")
+        self.clear_previews()
         threading.Thread(
-            target=self._generate_preview, args=(vol_str, start_ch_str), daemon=True
+            target=self._scan_and_build_preview,
+            args=(vol_str, start_ch_str),
+            daemon=True,
         ).start()
 
-    def _generate_preview(self, vol_str, start_ch_str):
+    def _scan_and_build_preview(self, vol_str, start_ch_str):
         source = self.source_entry.get()
         prefix = self.prefix_entry.get()
 
         if not source or not os.path.exists(source):
-            self._update_preview("Error: Invalid or missing Source Folder.")
             return
 
         try:
             target_vol = int(vol_str)
             target_start = int(start_ch_str)
         except ValueError:
-            self._update_preview("Error: Invalid Volume or Chapter number.")
             return
 
-        self._update_preview(
-            f"Scanning content for Volume {target_vol}...\n(Start Ch: {target_start})\nPlease wait..."
-        )
-
-        # 1. Determine Stop Chapter based on ALL entries
-        # We need to find what the NEXT volume starts at to know where THIS one ends.
+        # 1. Determine Limits
         vol_defs = {}
         for _, e_v, e_c in self.volume_entries:
             try:
@@ -299,88 +414,83 @@ class ModernMangaMerger(ctk.CTk):
                 continue
 
         sorted_vols = sorted(vol_defs.keys())
-
-        # Find our index
         try:
             idx = sorted_vols.index(target_vol)
-            # If there is a next volume, stop before it.
             if idx + 1 < len(sorted_vols):
-                next_vol_start = vol_defs[sorted_vols[idx + 1]]
-                limit = next_vol_start
+                limit = vol_defs[sorted_vols[idx + 1]]
             else:
-                # If it's the last volume, check the global stop limit
                 try:
                     limit = int(self.stop_ch.get())
                 except:
                     limit = 0
                 if limit == 0:
-                    limit = 999999  # No limit
+                    limit = 999999
         except ValueError:
             limit = 999999
 
-        # 2. Scan Files
+        # 2. Find Chapters
         all_files = [
             f for f in os.listdir(source) if f.lower().endswith((".zip", ".cbz"))
         ]
         matching_files = []
 
         for f in all_files:
-            if f.startswith(prefix):
+            if prefix and f.startswith(prefix):
                 continue
-            c_num = self.get_chapter_number(f)
 
+            c_num = self.get_chapter_number(f)
             if c_num >= target_start and c_num < limit:
                 matching_files.append(f)
 
         matching_files.sort(key=self.get_chapter_number)
 
-        # 3. Read Zips (The "Pages" part)
-        output_text = f"=== PREVIEW: VOLUME {target_vol:02d} ===\n"
-        output_text += (
-            f"Range: Ch {target_start} -> "
-            + (f"Ch {limit} (Exclusive)" if limit < 999999 else "End")
-            + "\n\n"
-        )
-
+        # 3. Read structure
+        preview_data = []
         if not matching_files:
-            output_text += "No matching chapters found in source folder."
-        else:
-            total_pages = 0
-            for cbz in matching_files:
-                output_text += f"📄 {cbz}\n"
-                try:
-                    full_path = os.path.join(source, cbz)
-                    with zipfile.ZipFile(full_path, "r") as z:
-                        # Get images only
-                        imgs = [
-                            x
-                            for x in z.namelist()
-                            if x.lower().endswith((".jpg", ".png", ".jpeg", ".webp"))
-                        ]
-                        imgs.sort()
-                        total_pages += len(imgs)
+            self.after(0, lambda: self._show_no_files_msg(target_vol))
+            return
 
-                        # List them indented
-                        for img in imgs:
-                            output_text += f"    └─ {img}\n"
-                except Exception as e:
-                    output_text += f"    [Error reading file: {str(e)}]\n"
-                output_text += "\n"
+        for cbz in matching_files:
+            full_path = os.path.join(source, cbz)
+            pages = []
+            try:
+                with zipfile.ZipFile(full_path, "r") as z:
+                    pages = [
+                        x
+                        for x in z.namelist()
+                        if x.lower().endswith((".jpg", ".png", ".jpeg", ".webp"))
+                    ]
+                    pages.sort()
+            except:
+                pass
 
-            output_text += (
-                f"---------------------------\nTotal Pages found: {total_pages}"
+            preview_data.append({"name": cbz, "path": full_path, "pages": pages})
+
+        self.after(0, lambda: self._build_accordions(target_vol, preview_data))
+
+    def _show_no_files_msg(self, vol_num):
+        self.lbl_prev_title.configure(text=f" VOLUME {vol_num} - NO FILES FOUND ")
+        ctk.CTkLabel(
+            self.preview_container, text="No chapters matched your criteria."
+        ).pack(pady=20)
+
+    def _build_accordions(self, vol_num, data):
+        self.lbl_prev_title.configure(text=f" VOLUME {vol_num} CONTENT ")
+
+        if not data:
+            return
+
+        for chap_data in data:
+            accordion = ChapterAccordion(
+                self.preview_container,
+                chapter_filename=chap_data["name"],
+                zip_path=chap_data["path"],
+                image_list=chap_data["pages"],
             )
+            accordion.pack(fill="x", pady=2)
+            self.active_accordions.append(accordion)
 
-        self._update_preview(output_text)
-
-    def _update_preview(self, text):
-        # Helper to update GUI from thread
-        self.preview_text.configure(state="normal")
-        self.preview_text.delete("1.0", "end")
-        self.preview_text.insert("1.0", text)
-        self.preview_text.configure(state="disabled")
-
-    # --- MAIN MERGE LOGIC (Same as before) ---
+    # --- MAIN MERGE LOGIC ---
     def start_process_thread(self):
         threading.Thread(target=self.run_merger, daemon=True).start()
 
@@ -424,8 +534,9 @@ class ModernMangaMerger(ctk.CTk):
 
             target_files = []
             for f in all_files:
-                if f.startswith(prefix):
+                if prefix and f.startswith(prefix):
                     continue
+
                 c_num = self.get_chapter_number(f)
                 if stop_limit > 0 and c_num >= stop_limit:
                     continue
