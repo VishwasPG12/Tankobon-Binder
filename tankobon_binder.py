@@ -17,7 +17,7 @@ ctk.set_default_color_theme("dark-blue")
 # --- UPDATE CONFIGURATION ---
 REPO_OWNER = "VishwasPG12"
 REPO_NAME = "Tankobon-Binder"
-CURRENT_VERSION = "v1.0.0"  # CHANGE THIS when you release a new version (e.g., v1.0.1)
+CURRENT_VERSION = "v2.0.0"  # CHANGE THIS when you release a new version (e.g., v1.0.1)
 
 
 class ChapterAccordion(ctk.CTkFrame):
