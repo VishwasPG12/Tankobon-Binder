@@ -33,7 +33,7 @@ Source Folder: Select the folder containing your loose chapter files (.zip or .c
 
 Prefix: Enter the prefix you want for your output files (e.g., OnePiece_).
 
-Define Volumes:
+Define Volumes: Enter the required volume needed.
 
 Auto: Use the generator toolbar to create rows for Volumes 1-100 instantly.
 
