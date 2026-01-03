@@ -1,0 +1,12 @@
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# Python internals
+__pycache__/
+*.pyc
+
+# Local Environment
+.venv/
+env/
