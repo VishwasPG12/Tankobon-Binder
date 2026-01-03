@@ -29,19 +29,19 @@ pip install customtkinter Pillow
 python main.py
 ```
 ### 🚀 Usage
-Source Folder: Select the folder containing your loose chapter files (.zip or .cbz).
+* Source Folder: Select the folder containing your loose chapter files (.zip or .cbz).
 
-Prefix: Enter the prefix you want for your output files (e.g., OnePiece_).
+* Prefix: Enter the prefix you want for your output files (e.g., OnePiece_).
 
-Define Volumes: Enter the required volume needed.
+* Define Volumes: Enter the required volume needed.
 
-Auto: Use the generator toolbar to create rows for Volumes 1-100 instantly.
+* Auto: Use the generator toolbar to create rows for Volumes 1-100 instantly.
 
-Manual: Click "+ Add Row" to define specific volume ranges manually.
+* Manual: Click "+ Add Row" to define specific volume ranges manually.
 
-Preview: Click the 👁 Eye Icon on any row to scan your folder and see exactly which chapters will be included. Click individual pages to preview the image.
+* Preview: Click the 👁 Eye Icon on any row to scan your folder and see exactly which chapters will be included. Click individual pages to preview the image.
 
-Run: Click ▶ RUN MERGER. The app will create new .cbz files in your source folder.
+* Run: Click ▶ RUN MERGER. The app will create new .cbz files in your source folder.
 
 ### 📦 Building (Create .exe)
 To build a standalone executable for Windows:
@@ -52,18 +52,19 @@ pyinstaller --noconsole --onefile --collect-all customtkinter main.py
 ```
 Your .exe file will appear in the dist/ folder.
 
-🤝 Contributing
+### 🤝 Contributing
+
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-Fork the Project
+* Fork the Project
 
-Create your Feature Branch (git checkout -b feature/AmazingFeature)
+* Create your Feature Branch (git checkout -b feature/AmazingFeature)
 
-Commit your Changes (git commit -m 'Add some AmazingFeature')
++ Commit your Changes (git commit -m 'Add some AmazingFeature')
 
-Push to the Branch (git push origin feature/AmazingFeature)
+* Push to the Branch (git push origin feature/AmazingFeature)
 
-Open a Pull Request
+* Open a Pull Request
 
 ### 📝 License
 Distributed under the MIT License. See LICENSE for more information.
