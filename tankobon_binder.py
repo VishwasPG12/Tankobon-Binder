@@ -3,6 +3,9 @@ import zipfile
 import re
 import threading
 import io
+import sys
+import subprocess
+import requests  # Required for updates
 from PIL import Image
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
@@ -10,6 +13,11 @@ from tkinter import filedialog, messagebox
 # --- CONFIGURATION ---
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
+
+# --- UPDATE CONFIGURATION ---
+REPO_OWNER = "VishwasPG12"
+REPO_NAME = "Tankobon-Binder"
+CURRENT_VERSION = "v1.0.0"  # CHANGE THIS when you release a new version (e.g., v1.0.1)
 
 
 class ChapterAccordion(ctk.CTkFrame):
@@ -68,7 +76,6 @@ class ChapterAccordion(ctk.CTkFrame):
             return
 
         # Create a "Row Frame" for each page
-        # This allows us to pack the image INSIDE this row, directly below the button
         for img_name in self.image_list:
             row_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
             row_frame.pack(fill="x", pady=1)
@@ -114,7 +121,6 @@ class ChapterAccordion(ctk.CTkFrame):
             )
 
             # Create the Label containing the image
-            # We pack it into 'row_frame' so it appears right under the button we clicked
             img_label = ctk.CTkLabel(row_frame, text="", image=ctk_img)
             img_label.pack(pady=5)
 
@@ -132,7 +138,7 @@ class ModernMangaMerger(ctk.CTk):
         super().__init__()
 
         # Window Setup
-        self.title("Manga Volume Merger")
+        self.title(f"Manga Volume Merger ({CURRENT_VERSION})")  # Show version in title
         self.geometry("1200x800")
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -141,6 +147,9 @@ class ModernMangaMerger(ctk.CTk):
         self.active_accordions = []
 
         self.create_ui()
+
+        # --- TRIGGER AUTO UPDATE CHECK ---
+        self.check_for_updates()
 
     def create_ui(self):
         # --- HEADER ---
@@ -583,6 +592,90 @@ class ModernMangaMerger(ctk.CTk):
                             z_out.writestr(new_name, data)
                 except:
                     pass
+
+    # --- AUTO-UPDATE LOGIC ---
+    def check_for_updates(self):
+        """
+        Checks the GitHub repository for a newer release.
+        If found, prompts the user to download and update.
+        """
+        API_URL = (
+            f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+        )
+
+        def _update_thread():
+            try:
+                response = requests.get(API_URL)
+                if response.status_code == 200:
+                    latest_data = response.json()
+                    latest_tag = latest_data["tag_name"]
+
+                    # Simple string comparison (works for v1.0.0 vs v1.0.1)
+                    if latest_tag > CURRENT_VERSION:
+                        self.after(
+                            0,
+                            lambda: self._prompt_update(
+                                latest_tag, latest_data["assets"]
+                            ),
+                        )
+                else:
+                    print(f"Update check failed: {response.status_code}")
+            except Exception as e:
+                print(f"Update check error: {e}")
+
+        threading.Thread(target=_update_thread, daemon=True).start()
+
+    def _prompt_update(self, new_version, assets):
+        """
+        Ask the user if they want to update.
+        """
+        msg = f"A new version ({new_version}) is available!\n\nDo you want to download and install it now?"
+        if messagebox.askyesno("Update Available", msg):
+            # Find the .exe asset
+            download_url = None
+            for asset in assets:
+                if asset["name"].endswith(".exe"):
+                    download_url = asset["browser_download_url"]
+                    break
+
+            if download_url:
+                self._download_and_install(download_url, new_version)
+            else:
+                messagebox.showerror(
+                    "Error",
+                    "Could not find a downloadable executable file in the release.",
+                )
+
+    def _download_and_install(self, url, version):
+        """
+        Downloads the new .exe and replaces the old one.
+        """
+        try:
+            self.btn_run.configure(state="disabled", text="Downloading Update...")
+
+            # 1. Download the file
+            response = requests.get(url, stream=True)
+            new_filename = f"Tankobon_Binder_{version}.exe"
+
+            with open(new_filename, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            # 2. Notify and Exit
+            messagebox.showinfo(
+                "Download Complete",
+                f"Update downloaded successfully as:\n{new_filename}\n\nPlease close this app and run the new file.",
+            )
+
+            # Open folder to show the new file
+            subprocess.Popen(f'explorer /select,"{os.path.abspath(new_filename)}"')
+            self.destroy()  # Close current app
+
+        except Exception as e:
+            messagebox.showerror(
+                "Update Failed", f"An error occurred during download:\n{e}"
+            )
+            self.btn_run.configure(state="normal", text="▶ RUN MERGER")
 
 
 if __name__ == "__main__":
