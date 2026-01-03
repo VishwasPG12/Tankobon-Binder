@@ -2,7 +2,7 @@
 
 **Tankobon Binder** is a modern, sleek Python utility designed for manga collectors and archivists. It automatically merges loose manga chapters (`.zip` / `.cbz`) into organized Volume files (`.cbz`), making them perfect for e-readers and media servers like Komga or Kavita.
 
-![App Screenshot](assets/ss.png)
+![App Screenshot](Assets/ss.png)
 
 ## ✨ Features
 
